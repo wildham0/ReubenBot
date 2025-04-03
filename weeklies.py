@@ -32,7 +32,8 @@ async def submit_weekly(context, weekly_data):
     sorted_results = sorted(all_results,key=lambda x:all_results[x]["time"])
     for r in sorted_results:
         current = all_results[r]
-        results += current["name"] + ": " + current["time"]
+        if current["time"] != "spec":
+            results += current["name"] + ": " + current["time"]
 
     empty_results = { }
     write_results_file(empty_results)
@@ -69,6 +70,8 @@ async def submit_result(context, time):
     member = context["member"]
     spoilers_id = context["spoilers"]
     spoilers_channel = await guild.fetch_channel(spoilers_id)
+    weekly_id = context["weekly"]
+    weekly_channel = await guild.fetch_channel(weekly_id)
 
     all_results = read_results_file()
 
@@ -79,18 +82,15 @@ async def submit_result(context, time):
         return "You have already submitted results for this weekly."
 
     if time == "forfeit":
-        result = { "name" : member.display_name, "time" : "forfeit" }
-        all_results[member.name] = result
-        write_results_file(all_results)
-        result_message = await spoilers_channel.send(member.mention + " forfeited.")
-        await result_message.pin()
-        role = get(guild.roles, name=weeklies_spoilers_role)
-        await member.add_roles(role)
-        return "You forfeited the weekly."
+        result = { "name" : member.display_name, "time" : time }
+        player_text = "You forfeited the weekly."
+        result_text = member.mention + " forfeited."
+        announce = True
     elif time == "spec":
-        role = get(guild.roles, name=weeklies_spoilers_role)
-        await member.add_roles(role)
-        return "Spectating the weekly."
+        result = { "name" : member.display_name, "time" : time }
+        player_text = "Spectating the weekly."
+        result_text = ""
+        announce = False
     else:
         time_element = time.split(":")
         if len(time_element) < 3:
@@ -100,13 +100,39 @@ async def submit_result(context, time):
         time_element[2] = "00" + time_element[2]
         processed_time = time_element[0][-2:] + ":" + time_element[1][-2:] + ":" + time_element[2][-2:]
         result = {"name": member.name, "time": processed_time }
-        all_results[member.name] = result
-        write_results_file(all_results)
-        result_message = await spoilers_channel.send(member.mention + " finished with a time of " + processed_time + ".")
+        result_text = member.mention + " finished with a time of " + processed_time + "."
+        announce = True
+        player_text = "Your time was submitted successfully!"
+
+    all_results[member.name] = result
+    write_results_file(all_results)
+    role = get(guild.roles, name=weeklies_spoilers_role)
+    await member.add_roles(role)
+
+    if announce:
+        result_message = await spoilers_channel.send(result_text)
         await result_message.pin()
-        role = get(guild.roles, name=weeklies_spoilers_role)
-        await member.add_roles(role)
-        return "Your time was submitted successfully!"
+
+    participant_count = 0
+    for r in all_results.values():
+        if r["time"] != "spec":
+            participant_count += 1
+
+    participant_message = "\n\nNumber of participants: "
+    current_weekly = read_weekly_file()
+
+    if current_weekly is not None:
+        try:
+            weekly_message = await weekly_channel.fetch_message(current_weekly["message"])
+        except discord.errors.NotFound:
+            print(f'Couldn\'t find previous weekly message.')
+        else:
+            message_processed = weekly_message.content.split(participant_message)
+            await weekly_message.edit(content=message_processed[0] + participant_message + str(participant_count))
+            print("Participant count updated.")
+
+    return player_text
+
 
 def format_weekly(weekly_data):
     format_weekly_message = (weekly_data["description"] + "\nAuthor: <@" +  weekly_data["author"] + ">\nSeed: " +
