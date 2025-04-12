@@ -33,7 +33,7 @@ async def submit_weekly(context, weekly_data):
     for r in sorted_results:
         current = all_results[r]
         if current["time"] != "spec":
-            results += current["name"] + ": " + current["time"]
+            results += current["name"] + ": " + current["time"] + "\n"
 
     empty_results = { }
     write_results_file(empty_results)
